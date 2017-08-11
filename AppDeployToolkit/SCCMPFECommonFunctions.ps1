@@ -190,7 +190,7 @@ Function Create-SCCMPFEConfiguration
 					<CreateDDR>TRUE</CreateDDR>
 			    	<HTTPDDR>FALSE</HTTPDDR>
 			    	<ServerRemediation>FALSE</ServerRemediation>
-			    	<WorkstationRemediation>FALSE</WorkstationRemediation>
+			    	<WorkstationRemediation>TRUE</WorkstationRemediation>
 			    	<Debug>FALSE</Debug>
 			    <!--- Site Settings -->
 			    	<PrimarySiteServer>$myFQDN</PrimarySiteServer>
