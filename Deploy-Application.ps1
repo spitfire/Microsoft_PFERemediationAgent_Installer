@@ -171,7 +171,7 @@ Try {
 				Catch
 				{
 					Write-Log "Warning: Failed to get SCCM Primary Site Server from WMI" -Severity 2 -Source Pre-Installation
-					$script:PrimarySiteServer = Get-Content Primary.txt
+					$script:PrimarySiteServer = Get-Content "$DirSupportFiles\Primary.txt"
 				}
 			}
 		}
