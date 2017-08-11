@@ -137,6 +137,7 @@ Function Create-SCCMPFEConfiguration
 			    	<PolicyPlatformLocalAuthorityService>TRUE</PolicyPlatformLocalAuthorityService>
 			    	<PolicyPlatformProcessorService>TRUE</PolicyPlatformProcessorService>
 			    <!--- ConfigMgr Remediation Settings -->
+					<LatestSCCMVersion>5.00.8498.1711</LatestSCCMVersion>
 					<CCMRepository>TRUE</CCMRepository>
 			    	<HWINV>TRUE</HWINV>
 			    	<SWINV>TRUE</SWINV>
