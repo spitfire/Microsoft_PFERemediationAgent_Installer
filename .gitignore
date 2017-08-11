@@ -15,10 +15,10 @@
 *.DS_Store
 
 #AppDeploymentToolkit branding
-*AppDeploymentToolkitBanner.png
-*AppDeploymentToolkitLogo.ico
+AppDeployToolkitBanner.png
+AppDeployToolkitLogo.ico
 
 #PFE Remediation Agent configs
-*PFERemediationSettings.xml
-*PFERemediation.exe.config
-*PFERemediationScript.ps1
+PFERemediationSettings.xml
+PFERemediation.exe.config
+PFERemediationScript.ps1
