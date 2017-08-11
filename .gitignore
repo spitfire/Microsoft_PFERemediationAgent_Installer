@@ -1,0 +1,24 @@
+# Text files
+*.txt
+*.csv
+
+#Sapien PowerShell Studio Temp Files
+*.TempPoint.ps1
+
+#Executable Files
+*.exe
+
+#Installer Files
+*.msi
+
+#Mac files
+*.DS_Store
+
+#AppDeploymentToolkit branding
+*AppDeploymentToolkitBanner.png
+*AppDeploymentToolkitLogo.ico
+
+#PFE Remediation Agent configs
+*PFERemediationSettings.xml
+*PFERemediation.exe.config
+*PFERemediationScript.ps1
