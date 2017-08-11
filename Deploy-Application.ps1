@@ -190,12 +190,13 @@ Try {
 			
 			## <Perform Installation tasks here>
 			Execute-MSI -Action 'Install' -Path "$dirfiles\PFERemediationAgent.msi" -AddParameters "PRIMARYSITENAME=$PrimarySiteServer"
-			If (Get-InstalledApplication -Name "System Center Configuration Manager Primary Site Setup")
+			If ($isPrimarySiteServer)
 			{
 				Write-Log "Info: Creating $ShareName share" -Source Installation
 				Create-SCCMPFEClientFolder
 				Apply-SCCMPFEClientFolderPermissions
 				Create-SCCMPFEClientShare
+				Create-SCCMPFESharesPermissions
 			}
 			
 			
@@ -205,7 +206,7 @@ Try {
 			[string]$installPhase = 'Post-Installation'
 			
 			## <Perform Post-Installation tasks here>
-			If (Get-InstalledApplication -Name "System Center Configuration Manager Primary Site Setup")
+			If ($isPrimarySiteServer)
 			{
 				Write-Log "Info: Creating/copying SCCM PFE Configuration" -Source Post-Installation
 				Create-SCCMPFEConfiguration

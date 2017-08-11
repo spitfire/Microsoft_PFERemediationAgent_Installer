@@ -8,47 +8,66 @@
 	 Filename:     	
 	===========================================================================
 	.DESCRIPTION
-		Creates a new folder called $FolderName and file share called $ShareName that's pointing to it. This is for SCCM PFE Client Health solution. It is mean to be ran on new SCCM primary servers.
+		Creates a new folder called $ClientShareName and file share called $ClientShareName that's pointing to it. This is for SCCM PFE Client Health solution. It is mean to be ran on new SCCM primary servers.
 #>
 #region SCCM PFE Primary site functions
+$ClientShareName = "Client$"
+Try
+{
+	Write-Log "Info Trying to find domains using ActiveDirectory module" -Source Apply-SCCMPFEClientFolderPermissions
+	If (!(Get-Module ActiveDirectory)) { Import-Module ActiveDirectory }
+	$script:Domains = Get-ADForest | Select-Object -ExpandProperty Domains
+}
+Catch
+{
+	Write-Log "Warning: Failed to find domains using ActiveDirectory module" -Severity 2 -Source Apply-SCCMPFEClientFolderPermissions
+	Try
+	{
+		Write-Log "Trying to find domains using system.directoryservices.activedirectory.Forest" -Source Apply-SCCMPFEClientFolderPermissions
+		$script:Domains = (([system.directoryservices.activedirectory.Forest]::GetCurrentForest()).Domains) | %{ $_.Name }
+	}
+	Catch
+	{
+		Write-Log "Error: Failed to find domains using system.directoryservices.activedirectory.Forest" -Severity 3 -Source Apply-SCCMPFEClientFolderPermissions
+	}
+}
 
 #region Create-SCCMPFEClientFolder
 Function Create-SCCMPFEClientFolder
 {
-	$ShareName = "Client$"
+	
 	If (Get-SmbShare -Name PFEOutgoing$)
 	{
-		$FolderName = ((Get-SmbShare -Name PFEOutgoing$).Path).Replace('PFEOutgoing$', "$ShareName")
-		$PFEOutgoingShare = (Get-SmbShare -Name PFEOutgoing$).Path
+		$script:PFEClientSharePath = ((Get-SmbShare -Name PFEOutgoing$).Path).Replace('PFEOutgoing$', "$ClientShareName")
 	}
-	If (!(Test-Path "$FolderName"))
+	If (!(Test-Path "$script:PFEClientSharePath"))
 	{
 		Try
 		{
 			
-			Write-Log "Info: Folder $FolderName does not exist, creating it.." -Source Create-SCCMPFEClientFolder
-			New-Item "$FolderName" –type directory
-			If (Test-Path "$FolderName")
+			Write-Log "Info: Folder $script:PFEClientSharePath does not exist, creating it.." -Source Create-SCCMPFEClientFolder
+			New-Item "$script:PFEClientSharePath" –type directory
+			If (Test-Path "$script:PFEClientSharePath")
 			{
-				Write-Log "Info: Created folder $FolderName" -Source Create-SCCMPFEClientFolder
+				Write-Log "Info: Created folder $script:PFEClientSharePath" -Source Create-SCCMPFEClientFolder
 			}
 			Else
 			{
-				Write-Log "Error: Failed to create $FolderName Folder" -Source Create-SCCMPFEClientFolder
+				Write-Log "Error: Failed to create $script:PFEClientSharePath Folder" -Source Create-SCCMPFEClientFolder
 				Read-Host -Prompt "Press enter to exit"
 				Exit
 			}
 		}
 		Catch
 		{
-			Write-Log "Failed to create $FolderName Folder" -Source Create-SCCMPFEClientFolder
+			Write-Log "Failed to create $script:PFEClientSharePath Folder" -Source Create-SCCMPFEClientFolder
 			Exit-Script -ExitCode 69111
 		}
 		
 	}
 	Else
 	{
-		Write-Log "Folder $FolderName already exists" -Source Create-SCCMPFEClientFolder
+		Write-Log "Folder $script:PFEClientSharePath already exists" -Source Create-SCCMPFEClientFolder
 	}
 }
 
@@ -57,23 +76,53 @@ Function Create-SCCMPFEClientFolder
 #region Apply-SCCMPFEClientFolderPermissions
 Function Apply-SCCMPFEClientFolderPermissions
 {
-	Write-Log "Setting ACLs for $FolderName"
-	If (!(Get-Module ActiveDirectory)) { Import-Module ActiveDirectory }
-	$Domains = Get-ADForest | Select-Object -ExpandProperty Domains
-	ForEach ($Domain in $Domains)
+	
+	$script:PFEOutgoingShare = (Get-SmbShare -Name PFEOutgoing$).Path
+	$script:PFEIncomingShare = (Get-SmbShare -Name PFEIncoming$).Path
+	If (Get-SmbShare -Name "$ClientShareName" -ea 0)
 	{
-		$Acl = Get-Acl "$FolderName"
-		$Ar = New-Object  system.security.accesscontrol.filesystemaccessrule("$Domain\Domain Computers", "ReadAndExecute", "ContainerInherit,ObjectInherit", "None", "Allow")
+		$script:PFEClientSharePath = (Get-SmbShare -Name "$ClientShareName").Path
+	}
+	$Folders = @("$script:PFEClientSharePath", "$script:PFEOutgoingShare")
+	
+	foreach ($Folder in $Folders)
+	{
+		Write-Log "Setting ACLs for $Folder" -Source Apply-SCCMPFEClientFolderPermissions
+		
+		
+		ForEach ($Domain in $script:Domains)
+		{
+			$Acl = Get-Acl "$Folder"
+			$Ar = New-Object  system.security.accesscontrol.filesystemaccessrule("$Domain\Domain Computers", "ReadAndExecute", "ContainerInherit,ObjectInherit", "None", "Allow")
+			$Acl.SetAccessRule($Ar)
+			Try
+			{
+				Write-Log "Info: Setting ReadAndExecute ACL on $Folder for $Domain`\Domain Computers" -Source Apply-SCCMPFEClientFolderPermissions
+				Set-Acl "$Folder" $Acl
+				Write-Log "Info: Applied ReadAndExecute ACL on $Folder for $Domain`\Domain Computers" -Source Apply-SCCMPFEClientFolderPermissions
+			}
+			Catch
+			{
+				Write-Log "Error: Failed to set ReadAndExecute ACL on $Folder for $Domain`\Domain Computers" -Source Apply-SCCMPFEClientFolderPermissions
+				Exit-Script -ExitCode 69112
+			}
+		}
+	}
+	$Folder = $script:PFEIncomingShare
+	ForEach ($Domain in $script:Domains)
+	{
+		$Acl = Get-Acl "$Folder"
+		$Ar = New-Object  system.security.accesscontrol.filesystemaccessrule("$Domain\Domain Computers", "Read, Write, ReadAndExecute, Modify", "ContainerInherit,ObjectInherit", "None", "Allow")
 		$Acl.SetAccessRule($Ar)
 		Try
 		{
-			Write-Log "Info: Setting ACL for $Domain`\Domain Computers" -Source Apply-SCCMPFEClientFolderPermissions
-			Set-Acl "$FolderName" $Acl
-			Write-Log "Info: Applied ACL for $Domain`\Domain Computers" -Source Apply-SCCMPFEClientFolderPermissions
+			Write-Log "Info: Setting ReadWriteExecuteModify ACL on $Folder for $Domain`\Domain Computers" -Source Apply-SCCMPFEClientFolderPermissions
+			Set-Acl "$Folder" $Acl
+			Write-Log "Info: Applied ReadWriteExecuteModify ACL on $Folder for $Domain`\Domain Computers" -Source Apply-SCCMPFEClientFolderPermissions
 		}
 		Catch
 		{
-			Write-Log "Error: Failed to set ACL for $Domain`\Domain Computers" -Source Apply-SCCMPFEClientFolderPermissions
+			Write-Log "Error: Failed to set ReadWriteExecuteModify ACL on $Folder for $Domain`\Domain Computers" -Source Apply-SCCMPFEClientFolderPermissions
 			Exit-Script -ExitCode 69112
 		}
 	}
@@ -84,29 +133,49 @@ Function Apply-SCCMPFEClientFolderPermissions
 #region Create-SCCMPFEClientShare
 Function Create-SCCMPFEClientShare
 {
-	If (!(Get-SmbShare -Name "$ShareName" -ea 0))
+	If (!(Get-SmbShare -Name "$ClientShareName" -ea 0))
 	{
-		Write-Log "Share $ShareName does not exist, creating it.." -Source Create-SCCMPFEClientShare
-		New-SMBShare –Name "$ShareName" –Path "$FolderName" `
+		Write-Log "Share $ClientShareName does not exist, creating it.." -Source Create-SCCMPFEClientShare
+		New-SMBShare –Name "$ClientShareName" –Path "$script:PFEClientSharePath" `
 					 -ReadAccess "APACIPAPER\Domain Computers", "EMEAIPAPER\Domain Computers", "NAIPAPER\Domain Computers", "SAIPAPER\Domain Computers"
-		Write-Log "Created share $ShareName" -Source Create-SCCMPFEClientShare
+		#Write-Log "Created share $ClientShareName" -Source Create-SCCMPFEClientShare
+		If (Get-SmbShare -Name "$ClientShareName" -ea 0)
+		{
+			Write-Log "Share $ClientShareName created successfully" -Source Create-SCCMPFEClientShare
+		}
+		Else
+		{
+			Write-Log "Failed to create share" -Source Create-SCCMPFEClientShare
+			Exit-Script -ExitCode 69113
+		}
 	}
 	Else
 	{
-		Write-Log "Info Share already exists" -Source Create-SCCMPFEClientShare
+		Write-Log "Info: Share already exists, applying permissions" -Source Create-SCCMPFEClientShare
+		
+		foreach ($domain in $script:Domains)
+		{
+			Write-Log "Info: Applying Read permissions on $ClientShareName for $domain\Domain Computers" -Source Create-SCCMPFEClientShare
+			Grant-SmbShareAccess -Name "$ClientShareName" -AccountName "$domain\Domain Computers" -AccessRight Read -Confirm:$false
+		}
+		
 	}
-	If (Get-SmbShare -Name "$ShareName" -ea 0)
-	{
-		Write-Log "Share $ShareName created successfully" -Source Create-SCCMPFEClientShare
-	}
-	Else
-	{
-		Write-Log "Failed to create share" -Source Create-SCCMPFEClientShare
-		Exit-Script -ExitCode 69113
-	}
-}
+}#endregion Create-SCCMPFEClientShare
 
-#endregion Create-SCCMPFEClientShare
+#region Create-SCCMPFESharesPermissions
+Function Create-SCCMPFESharesPermissions
+{
+	foreach ($domain in $script:Domains)
+	{
+		Write-Log "Info: Applying Change permissions on PFEIncoming$ for $domain\Domain Computers" -Source Create-SCCMPFEClientShare
+		Grant-SmbShareAccess -Name 'PFEIncoming$' -AccountName "$domain\Domain Computers" -AccessRight Change -Confirm:$false
+	}
+	foreach ($domain in $script:Domains)
+	{
+		Write-Log "Info: Applying Read permissions on PFEOutgoing$ for $domain\Domain Computers" -Source Create-SCCMPFEClientShare
+		Grant-SmbShareAccess -Name 'PFEOutgoing$' -AccountName "$domain\Domain Computers" -AccessRight Read -Confirm:$false
+	}
+}#endregion Create-SCCMPFESharesPermissions
 
 #region Create-SCCMPFEConfiguration
 Function Create-SCCMPFEConfiguration
@@ -164,12 +233,12 @@ Function Create-SCCMPFEConfiguration
 	$SiteXML | Out-File "$PFEOutgoingShare\PFERemediationSettings.xml"
 }#endregion Create-SCCMPFEConfiguration
 
-#region Create-SCCMPFEConfiguration
+#region Copy-SCCMPFEConfiguration
 Function Copy-SCCMPFEConfiguration
 {
 	Copy-File "$dirSupportFiles\PFERemediationScript.ps1" -Destination "$PFEOutgoingShare\"
 	Copy-File "$dirSupportFiles\PFERemediation.exe.config" -Destination "$PFEOutgoingShare\"
-}#endregion Create-SCCMPFEConfiguration
+}#endregion Copy-SCCMPFEConfiguration
 
 #endregion SCCM PFE Primary site functions
 
@@ -181,8 +250,8 @@ Function Get-AllDomains
 	$oSearchRoot = [ADSI]("LDAP://CN=Partitions," + $oForestConfig)
 	$AdSearcher = [adsisearcher]"(&(objectcategory=crossref)(netbiosname=*))"
 	$AdSearcher.SearchRoot = $oSearchRoot
-	$domains = $AdSearcher.FindAll()
-	return $domains |ft
+	$script:Domains = $AdSearcher.FindAll()
+	return $script:Domains |ft
 }#endregion Get-AllDomains
 
 #region Get-ADSite
@@ -292,9 +361,9 @@ Function Get-SMSSiteCode
 		}
 		ElseIf ($Primary -eq $false)
 		{
-			$domains = Get-AllDomains
+			$script:Domains = Get-AllDomains
 			$ADSite = Get-ADSite
-			Foreach ($script:domain in $domains)
+			Foreach ($script:domain in $script:Domains)
 			{
 				Try
 				{
