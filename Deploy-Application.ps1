@@ -160,28 +160,28 @@ Try {
 			Else
 			{
 				Write-Log "Info: This is NOT a SCCM Primary Site Server" -Source Pre-Installation
-			Try
-			{
-				Write-Log "Info: Trying to get SCCM Primary Site Server from AD" -Source Pre-Installation
-				$script:PrimarySiteServer = Get-SMSMP -Source AD -Primary $true
-			}
-			Catch
-			{
-				Write-Log "Warning: Failed to get SCCM Primary Site Server from AD" -Severity 2 -Source Pre-Installation
 				Try
 				{
-					Write-Log "Info: Trying to get SCCM Primary Site Server from WMI" -Source Pre-Installation
-					$script:PrimarySiteServer = Get-SMSMP -Source WMI -Primary $true
+					Write-Log "Info: Trying to get SCCM Primary Site Server from AD" -Source Pre-Installation
+					$script:PrimarySiteServer = Get-SMSMP -Source AD -Primary $true
 				}
 				Catch
 				{
-					Write-Log "Warning: Failed to get SCCM Primary Site Server from WMI" -Severity 2 -Source Pre-Installation
-					$script:PrimarySiteServer = Get-Content "$DirSupportFiles\Primary.txt"
+					Write-Log "Warning: Failed to get SCCM Primary Site Server from AD" -Severity 2 -Source Pre-Installation
+					Try
+					{
+						Write-Log "Info: Trying to get SCCM Primary Site Server from WMI" -Source Pre-Installation
+						$script:PrimarySiteServer = Get-SMSMP -Source WMI -Primary $true
+					}
+					Catch
+					{
+						Write-Log "Warning: Failed to get SCCM Primary Site Server from WMI" -Severity 2 -Source Pre-Installation
+						$script:PrimarySiteServer = Get-Content "$DirSupportFiles\Primary.txt"
+					}
 				}
-			}
-		}
+			}		
 		
-		##*===============================================
+			##*===============================================
 			##* INSTALLATION 
 			##*===============================================
 			[string]$installPhase = 'Installation'

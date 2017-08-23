@@ -23,3 +23,5 @@ PFERemediationSettings.xml
 PFERemediation.exe.config
 PFERemediationScript.ps1
 Primary.txt
+
+AppDeployToolkit/Thumbs\.db
