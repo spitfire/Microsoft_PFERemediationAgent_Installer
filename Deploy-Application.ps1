@@ -119,108 +119,108 @@ Try {
 
 	
 	#endregion
-		##* Do not modify section above
+	##* Do not modify section above
 		
 		
 	##*===============================================
 	##* END VARIABLE DECLARATION
 	##*===============================================
 		
-		If ($deploymentType -ine 'Uninstall')
-		{
-			##*===============================================
-			##* PRE-INSTALLATION
-			##*===============================================
-			[string]$installPhase = 'Pre-Installation'
-			
-			## Show Welcome Message, close Internet Explorer if required, allow up to 3 deferrals, verify there is enough disk space to complete the install, and persist the prompt
-			Show-InstallationWelcome -CheckDiskSpace -PersistPrompt
-			
-			## Show Progress Message (with the default message)
-			Show-InstallationProgress
-			
-			## <Perform Pre-Installation tasks here>
-			If (Get-InstalledApplication -Name "Microsoft PFE Remediation for Configuration Manager")
-			{
-				Remove-MSIApplications -Name "Microsoft PFE Remediation for Configuration Manager"
-			}
-			
+	If ($deploymentType -ine 'Uninstall')
+	{
+		##*===============================================
+		##* PRE-INSTALLATION
+		##*===============================================
+		[string]$installPhase = 'Pre-Installation'
 		
-			If (Get-InstalledApplication -Name "System Center Configuration Manager Primary Site Setup")
+		## Show Welcome Message, close Internet Explorer if required, allow up to 3 deferrals, verify there is enough disk space to complete the install, and persist the prompt
+		Show-InstallationWelcome -CheckDiskSpace -PersistPrompt
+		
+		## Show Progress Message (with the default message)
+		Show-InstallationProgress
+		
+		## <Perform Pre-Installation tasks here>
+		If (Get-InstalledApplication -Name "Microsoft PFE Remediation for Configuration Manager")
+		{
+			Remove-MSIApplications -Name "Microsoft PFE Remediation for Configuration Manager"
+		}
+		
+	
+		If (Get-InstalledApplication -Name "System Center Configuration Manager Primary Site Setup")
+		{
+			$isPrimarySiteServer = $true
+			Write-Log "Info: This is a SCCM Primary Site Server" -Source Pre-Installation
+			$myFQDN = (Get-WmiObject win32_computersystem).DNSHostName + "." + (Get-WmiObject win32_computersystem).Domain
+			If ($myFQDN)
 			{
-				$isPrimarySiteServer = $true
-				Write-Log "Info: This is a SCCM Primary Site Server" -Source Pre-Installation
-				$myFQDN = (Get-WmiObject win32_computersystem).DNSHostName + "." + (Get-WmiObject win32_computersystem).Domain
-				If ($myFQDN)
-				{
-					Write-Log "Info: Setting PRIMARYSITENAME to own FQDN ($myFQDN)" -Source Pre-Installation
-					$PrimarySiteServer = $myFQDN
-				}
+				Write-Log "Info: Setting PRIMARYSITENAME to own FQDN ($myFQDN)" -Source Pre-Installation
+				$PrimarySiteServer = $myFQDN
 			}
-			Else
+		}
+		Else
+		{
+			Write-Log "Info: This is NOT a SCCM Primary Site Server" -Source Pre-Installation
+			Try
 			{
-				Write-Log "Info: This is NOT a SCCM Primary Site Server" -Source Pre-Installation
+				Write-Log "Info: Trying to get SCCM Primary Site Server from AD" -Source Pre-Installation
+				$script:PrimarySiteServer = Get-SMSMP -Source AD -Primary $true
+			}
+			Catch
+			{
+				Write-Log "Warning: Failed to get SCCM Primary Site Server from AD" -Severity 2 -Source Pre-Installation
 				Try
 				{
-					Write-Log "Info: Trying to get SCCM Primary Site Server from AD" -Source Pre-Installation
-					$script:PrimarySiteServer = Get-SMSMP -Source AD -Primary $true
+					Write-Log "Info: Trying to get SCCM Primary Site Server from WMI" -Source Pre-Installation
+					$script:PrimarySiteServer = Get-SMSMP -Source WMI -Primary $true
 				}
 				Catch
 				{
-					Write-Log "Warning: Failed to get SCCM Primary Site Server from AD" -Severity 2 -Source Pre-Installation
-					Try
-					{
-						Write-Log "Info: Trying to get SCCM Primary Site Server from WMI" -Source Pre-Installation
-						$script:PrimarySiteServer = Get-SMSMP -Source WMI -Primary $true
-					}
-					Catch
-					{
-						Write-Log "Warning: Failed to get SCCM Primary Site Server from WMI" -Severity 2 -Source Pre-Installation
-						$script:PrimarySiteServer = Get-Content "$DirSupportFiles\Primary.txt"
-					}
+					Write-Log "Warning: Failed to get SCCM Primary Site Server from WMI" -Severity 2 -Source Pre-Installation
+					$script:PrimarySiteServer = Get-Content "$DirSupportFiles\Primary.txt"
 				}
-			}		
+			}
+		}		
+	
+		##*===============================================
+		##* INSTALLATION 
+		##*===============================================
+		[string]$installPhase = 'Installation'
 		
-			##*===============================================
-			##* INSTALLATION 
-			##*===============================================
-			[string]$installPhase = 'Installation'
-			
-			## Handle Zero-Config MSI Installations
-			If ($useDefaultMsi)
-			{
-				[hashtable]$ExecuteDefaultMSISplat = @{ Action = 'Install'; Path = $defaultMsiFile }; If ($defaultMstFile) { $ExecuteDefaultMSISplat.Add('Transform', $defaultMstFile) }
-				Execute-MSI @ExecuteDefaultMSISplat; If ($defaultMspFiles) { $defaultMspFiles | ForEach-Object { Execute-MSI -Action 'Patch' -Path $_ } }
-			}
-			
-			## <Perform Installation tasks here>
-			Execute-MSI -Action 'Install' -Path "$dirfiles\PFERemediationAgent.msi" -AddParameters "PRIMARYSITENAME=$PrimarySiteServer"
-			If ($isPrimarySiteServer)
-			{
-				Write-Log "Info: Creating $ShareName share" -Source Installation
-				Create-SCCMPFEClientFolder
-				Apply-SCCMPFEClientFolderPermissions
-				Create-SCCMPFEClientShare
-				Create-SCCMPFESharesPermissions
-			}
-			
-			
-			##*===============================================
-			##* POST-INSTALLATION
-			##*===============================================
-			[string]$installPhase = 'Post-Installation'
-			
-			## <Perform Post-Installation tasks here>
-			If ($isPrimarySiteServer)
-			{
-				Write-Log "Info: Creating/copying SCCM PFE Configuration" -Source Post-Installation
-				Create-SCCMPFEConfiguration
-				Copy-SCCMPFEConfiguration
-			}
-			
-			## Display a message at the end of the install
-			If (-not $useDefaultMsi -and $showPostinstallMessage) { Show-InstallationPrompt -Message 'You can customize text to appear at the end of an install or remove it completely for unattended installations.' -ButtonRightText 'OK' -Icon Information -NoWait }
+		## Handle Zero-Config MSI Installations
+		If ($useDefaultMsi)
+		{
+			[hashtable]$ExecuteDefaultMSISplat = @{ Action = 'Install'; Path = $defaultMsiFile }; If ($defaultMstFile) { $ExecuteDefaultMSISplat.Add('Transform', $defaultMstFile) }
+			Execute-MSI @ExecuteDefaultMSISplat; If ($defaultMspFiles) { $defaultMspFiles | ForEach-Object { Execute-MSI -Action 'Patch' -Path $_ } }
 		}
+		
+		## <Perform Installation tasks here>
+		Execute-MSI -Action 'Install' -Path "$dirfiles\PFERemediationAgent.msi" -AddParameters "PRIMARYSITENAME=$PrimarySiteServer"
+		If ($isPrimarySiteServer)
+		{
+			Write-Log "Info: Creating $ShareName share" -Source Installation
+			Create-SCCMPFEClientFolder
+			Apply-SCCMPFEClientFolderPermissions
+			Create-SCCMPFEClientShare
+			Create-SCCMPFESharesPermissions
+		}
+		
+		
+		##*===============================================
+		##* POST-INSTALLATION
+		##*===============================================
+		[string]$installPhase = 'Post-Installation'
+		
+		## <Perform Post-Installation tasks here>
+		If ($isPrimarySiteServer)
+		{
+			Write-Log "Info: Creating/copying SCCM PFE Configuration" -Source Post-Installation
+			Create-SCCMPFEConfiguration
+			Copy-SCCMPFEConfiguration
+		}
+		
+		## Display a message at the end of the install
+		If (-not $useDefaultMsi -and $showPostinstallMessage) { Show-InstallationPrompt -Message 'You can customize text to appear at the end of an install or remove it completely for unattended installations.' -ButtonRightText 'OK' -Icon Information -NoWait }
+	}
 	
 	ElseIf ($deploymentType -ieq 'Uninstall')
 	{
