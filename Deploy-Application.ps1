@@ -140,7 +140,12 @@ Try {
 			Show-InstallationProgress
 			
 			## <Perform Pre-Installation tasks here>
+			If (Get-InstalledApplication -Name "Microsoft PFE Remediation for Configuration Manager")
+			{
+				Remove-MSIApplications -Name "Microsoft PFE Remediation for Configuration Manager"
+			}
 			
+		
 			If (Get-InstalledApplication -Name "System Center Configuration Manager Primary Site Setup")
 			{
 				$isPrimarySiteServer = $true
